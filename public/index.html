@@ -1,124 +1,143 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Raven Store | Liquor Commerce</title>
-    <link rel="stylesheet" href="/styles.css" />
-  </head>
-  <body>
-    <div id="ageGate" class="age-gate">
-      <div class="age-gate-card">
-        <h1>Age Verification</h1>
-        <p>You must be 18+ to browse and order alcohol.</p>
-        <button id="ageConfirmBtn">I am 18 or older</button>
-      </div>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Raven Store | Premium Liquor Commerce</title>
+
+  <!-- Google Fonts for Premium Theme -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;600;700&family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap"
+    rel="stylesheet">
+
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+
+<body>
+  <div id="ageGate" class="age-gate">
+    <div class="age-gate-card">
+      <h1>Age Verification</h1>
+      <p>You must be 18+ to browse and order alcohol.</p>
+      <button id="ageConfirmBtn">I am 18 or older</button>
     </div>
+  </div>
 
-    <header class="hero">
-      <div>
-        <h1 id="businessName">Chewaz Bar and Restaurant</h1>
-        <p>Liquor management and e-commerce for bottle + crate sales.</p>
-        <p id="businessMeta"></p>
+  <header class="hero">
+    <div>
+      <h1 id="businessName">Chewaz Bar & Restaurant</h1>
+      <p>Premium liquor management and e-commerce.</p>
+      <p id="businessMeta"></p>
+    </div>
+    <div class="hero-right">
+      <span id="salesPhones"></span>
+      <br />
+      <span id="deliveryHours"></span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="panel panel-wide">
+      <h2>Top Sellers</h2>
+      <p class="panel-note">Based on recent sold quantities from stock-out movements.</p>
+      <div id="topSellers" class="top-sellers-grid"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Catalog</h2>
+      <div class="filters">
+        <select id="categoryFilter"></select>
+        <input id="catalogSearch" type="search" placeholder="Search name, brand, size, category" />
+        <select id="sortFilter">
+          <option value="featured">Sort: Featured</option>
+          <option value="price_asc">Price: Low to High</option>
+          <option value="price_desc">Price: High to Low</option>
+          <option value="name_asc">Name: A to Z</option>
+          <option value="stock_desc">Stock: High to Low</option>
+        </select>
+        <button id="reloadCatalog">Reload</button>
       </div>
-      <div class="hero-right">
-        <span id="salesPhones"></span>
-        <br />
-        <span id="deliveryHours"></span>
+      <p class="panel-note">Import templates: <a href="/templates/product-import-template.csv" target="_blank"
+          rel="noreferrer">CSV</a> | <a href="/templates/product-import-template.json" target="_blank"
+          rel="noreferrer">JSON</a></p>
+      <div class="form-inline">
+        <input id="scanCode" type="number" min="1" placeholder="Scan product number e.g. 1" />
+        <select id="scanUnit">
+          <option value="bottle">Bottle</option>
+          <option value="crate">Crate</option>
+        </select>
+        <input id="scanQty" type="number" min="1" value="1" />
+        <button type="button" id="scanAddBtn">Scan + Add</button>
       </div>
-    </header>
+      <div id="catalog" class="catalog-grid"></div>
+    </section>
 
-    <main class="layout">
-      <section class="panel panel-wide">
-        <h2>Top Sellers</h2>
-        <p class="panel-note">Based on recent sold quantities from stock-out movements.</p>
-        <div id="topSellers" class="top-sellers-grid"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Catalog</h2>
-        <div class="filters">
-          <select id="categoryFilter"></select>
-          <input id="catalogSearch" type="search" placeholder="Search name, brand, size, category" />
-          <select id="sortFilter">
-            <option value="featured">Sort: Featured</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
-            <option value="name_asc">Name: A to Z</option>
-            <option value="stock_desc">Stock: High to Low</option>
+    <section class="panel">
+      <h2>Checkout</h2>
+      <div id="cart"></div>
+      <form id="checkoutForm">
+        <label>Name <input name="name" placeholder="Customer name" /></label>
+        <label>Phone <input name="phone" required placeholder="+2547..." /></label>
+        <label>ID Number (optional) <input name="idNumber" placeholder="National ID" /></label>
+        <label>Payment Method
+          <select name="paymentMethod" id="paymentMethod">
+            <option value="cash">Cash / Pay on Delivery</option>
+            <option value="mpesa">M-Pesa (STK Push)</option>
           </select>
-          <button id="reloadCatalog">Reload</button>
-        </div>
-        <p class="panel-note">Import templates: <a href="/templates/product-import-template.csv" target="_blank" rel="noreferrer">CSV</a> | <a href="/templates/product-import-template.json" target="_blank" rel="noreferrer">JSON</a></p>
-        <div class="form-inline">
-          <input id="scanCode" type="number" min="1" placeholder="Scan product number e.g. 1" />
-          <select id="scanUnit">
-            <option value="bottle">Bottle</option>
-            <option value="crate">Crate</option>
+        </label>
+        <label class="row">
+          <input type="checkbox" name="confirmAge" required />
+          <span>I confirm I am 18+ and ID will be verified on delivery.</span>
+        </label>
+        <button type="submit">Place Order</button>
+      </form>
+      <pre id="checkoutStatus" class="status"></pre>
+    </section>
+
+    <section class="panel">
+      <h2>Admin Inventory + Pricing</h2>
+      <div id="inventoryTable"></div>
+      <h3>Restock</h3>
+      <form id="restockForm" class="form-inline">
+        <select name="productId" id="restockProduct"></select>
+        <input type="number" name="bottles" min="0" value="0" placeholder="Bottles" />
+        <input type="number" name="crates" min="0" value="0" placeholder="Crates" />
+        <button type="submit">Apply</button>
+      </form>
+
+      <h3>Update Price</h3>
+      <form id="pricingForm" class="form-inline">
+        <select name="productId" id="priceProduct"></select>
+        <input type="number" name="priceBottle" min="1" placeholder="Bottle Price" required />
+        <input type="number" name="priceCrate" min="1" placeholder="Crate Price" required />
+        <button type="submit">Update</button>
+      </form>
+
+      <h3>Stock Movement (In/Out)</h3>
+      <div id="stockMovementTable"></div>
+    </section>
+
+    <section class="panel">
+      <h2>Marketing Prompts</h2>
+      <form id="marketingForm">
+        <label>Channel
+          <select name="channel">
+            <option value="whatsapp">WhatsApp</option>
+            <option value="sms">SMS</option>
           </select>
-          <input id="scanQty" type="number" min="1" value="1" />
-          <button type="button" id="scanAddBtn">Scan + Add</button>
-        </div>
-        <div id="catalog" class="catalog-grid"></div>
-      </section>
+        </label>
+        <label>Message (optional)
+          <textarea name="message" rows="4" placeholder="Leave blank for auto daily price prompt"></textarea>
+        </label>
+        <button type="submit">Broadcast Prompt</button>
+      </form>
+      <pre id="marketingStatus" class="status"></pre>
+    </section>
+  </main>
 
-      <section class="panel">
-        <h2>Checkout</h2>
-        <div id="cart"></div>
-        <form id="checkoutForm">
-          <label>Name <input name="name" placeholder="Customer name" /></label>
-          <label>Phone <input name="phone" required placeholder="+2547..." /></label>
-          <label>ID Number (optional) <input name="idNumber" placeholder="National ID" /></label>
-          <label class="row">
-            <input type="checkbox" name="confirmAge" required />
-            <span>I confirm I am 18+ and ID will be verified on delivery.</span>
-          </label>
-          <button type="submit">Place Order</button>
-        </form>
-        <pre id="checkoutStatus" class="status"></pre>
-      </section>
+  <script src="/app.js"></script>
+</body>
 
-      <section class="panel">
-        <h2>Admin Inventory + Pricing</h2>
-        <div id="inventoryTable"></div>
-        <h3>Restock</h3>
-        <form id="restockForm" class="form-inline">
-          <select name="productId" id="restockProduct"></select>
-          <input type="number" name="bottles" min="0" value="0" placeholder="Bottles" />
-          <input type="number" name="crates" min="0" value="0" placeholder="Crates" />
-          <button type="submit">Apply</button>
-        </form>
-
-        <h3>Update Price</h3>
-        <form id="pricingForm" class="form-inline">
-          <select name="productId" id="priceProduct"></select>
-          <input type="number" name="priceBottle" min="1" placeholder="Bottle Price" required />
-          <input type="number" name="priceCrate" min="1" placeholder="Crate Price" required />
-          <button type="submit">Update</button>
-        </form>
-
-        <h3>Stock Movement (In/Out)</h3>
-        <div id="stockMovementTable"></div>
-      </section>
-
-      <section class="panel">
-        <h2>Marketing Prompts</h2>
-        <form id="marketingForm">
-          <label>Channel
-            <select name="channel">
-              <option value="whatsapp">WhatsApp</option>
-              <option value="sms">SMS</option>
-            </select>
-          </label>
-          <label>Message (optional)
-            <textarea name="message" rows="4" placeholder="Leave blank for auto daily price prompt"></textarea>
-          </label>
-          <button type="submit">Broadcast Prompt</button>
-        </form>
-        <pre id="marketingStatus" class="status"></pre>
-      </section>
-    </main>
-
-    <script src="/app.js"></script>
-  </body>
 </html>

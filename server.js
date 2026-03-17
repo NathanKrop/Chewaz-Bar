@@ -3,6 +3,67 @@ const fs = require("fs");
 const path = require("path");
 const { URL } = require("url");
 
+// ── Africa's Talking SMS ──────────────────────────────────────────────────────
+const AT_API_KEY = process.env.AT_API_KEY || "";
+const AT_USERNAME = process.env.AT_USERNAME || "sandbox";
+const AT_SENDER = process.env.AT_SENDER || "";   // leave empty for shared shortcode
+
+let atSms = null;
+if (AT_API_KEY) {
+  const AfricasTalking = require("africastalking");
+  const at = AfricasTalking({ apiKey: AT_API_KEY, username: AT_USERNAME });
+  atSms = at.SMS;
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── M-Pesa Daraja API ─────────────────────────────────────────────────────────
+const MPESA_KEY = process.env.MPESA_CONSUMER_KEY || "";
+const MPESA_SECRET = process.env.MPESA_CONSUMER_SECRET || "";
+const MPESA_SHORTCODE = process.env.MPESA_SHORTCODE || "174379";
+const MPESA_PASSKEY = process.env.MPESA_PASSKEY || "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919";
+const MPESA_CALLBACK = process.env.MPESA_CALLBACK_URL || "";
+
+async function getMpesaToken() {
+  const auth = Buffer.from(`${MPESA_KEY}:${MPESA_SECRET}`).toString("base64");
+  const url = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials";
+  const res = await fetch(url, {
+    headers: { Authorization: `Basic ${auth}` }
+  });
+  const data = await res.json();
+  return data.access_token;
+}
+
+async function triggerStkPush(phone, amount, orderId) {
+  const token = await getMpesaToken();
+  const timestamp = new Date().toISOString().replace(/[^0-9]/g, "").slice(0, 14);
+  const password = Buffer.from(`${MPESA_SHORTCODE}${MPESA_PASSKEY}${timestamp}`).toString("base64");
+
+  const payload = {
+    BusinessShortCode: MPESA_SHORTCODE,
+    Password: password,
+    Timestamp: timestamp,
+    TransactionType: "CustomerPayBillOnline",
+    Amount: Math.round(amount),
+    PartyA: phone.replace(/[^0-9]/g, ""),
+    PartyB: MPESA_SHORTCODE,
+    PhoneNumber: phone.replace(/[^0-9]/g, ""),
+    CallBackURL: MPESA_CALLBACK,
+    AccountReference: orderId,
+    TransactionDesc: `Payment for Order ${orderId}`
+  };
+
+  const res = await fetch("https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  return res.json();
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
 const PORT = process.env.PORT || 8080;
 const HOST = process.env.HOST || "127.0.0.1";
 const DATA_PATH = path.join(__dirname, "data", "store.json");
@@ -97,14 +158,36 @@ function buildDailyPricePrompt(store, products, currency) {
   ].join("\n");
 }
 
-function simulateChannelSend(channel, phone, message) {
-  return {
-    channel,
-    phone,
-    message,
-    status: "queued",
-    provider: process.env.MARKETING_PROVIDER || "mock"
-  };
+async function sendChannelMessage(channel, phone, message) {
+  if (channel === "sms") {
+    if (!atSms) {
+      // No credentials — return mock so the rest of the flow still works
+      console.warn("[SMS] AT_API_KEY not set. Message not sent (mock mode).");
+      return { channel, phone, message, status: "mock", provider: "mock" };
+    }
+    try {
+      const opts = { to: [phone], message };
+      if (AT_SENDER) opts.from = AT_SENDER;
+      const resp = await atSms.send(opts);
+      const recipient = resp.SMSMessageData?.Recipients?.[0] || {};
+      return {
+        channel,
+        phone,
+        message,
+        status: recipient.status || "sent",
+        messageId: recipient.messageId || null,
+        cost: recipient.cost || null,
+        provider: "africastalking"
+      };
+    } catch (err) {
+      console.error("[SMS] Send error:", err.message);
+      return { channel, phone, message, status: "error", error: err.message, provider: "africastalking" };
+    }
+  }
+
+  // WhatsApp — not yet integrated; log and return mock
+  console.warn(`[WhatsApp] Provider not configured. Message to ${phone} not sent.`);
+  return { channel, phone, message, status: "mock", provider: "mock" };
 }
 
 function routeApi(req, res, url) {
@@ -331,7 +414,7 @@ function routeApi(req, res, url) {
 
   if (method === "POST" && url.pathname === "/api/marketing/broadcast") {
     return parseBody(req)
-      .then((body) => {
+      .then(async (body) => {
         const channel = body.channel;
         if (!["sms", "whatsapp"].includes(channel)) {
           return sendJson(res, 400, { error: "Channel must be sms or whatsapp" });
@@ -349,7 +432,9 @@ function routeApi(req, res, url) {
         const message = rawMessage.includes("Order:") ? rawMessage : `${rawMessage}\n${salesLine}`;
 
         const recipients = store.customers.filter((c) => c.channels && c.channels[channel] && c.phone);
-        const results = recipients.map((recipient) => simulateChannelSend(channel, recipient.phone, message));
+        const results = await Promise.all(
+          recipients.map((recipient) => sendChannelMessage(channel, recipient.phone, message))
+        );
 
         const log = {
           id: `mkt_${Date.now()}`,
@@ -363,12 +448,14 @@ function routeApi(req, res, url) {
         store.marketingLogs.unshift(log);
         writeStore(store);
 
+        const provider = atSms ? "africastalking" : "mock";
         return sendJson(res, 200, {
           ok: true,
           queued: results.length,
           channel,
           message,
-          provider: process.env.MARKETING_PROVIDER || "mock"
+          provider,
+          results
         });
       })
       .catch((err) => sendJson(res, 400, { error: err.message }));
@@ -376,6 +463,59 @@ function routeApi(req, res, url) {
 
   if (method === "GET" && url.pathname === "/api/marketing/logs") {
     return sendJson(res, 200, store.marketingLogs);
+  }
+
+  if (method === "POST" && url.pathname === "/api/payments/stkpush") {
+    return parseBody(req)
+      .then(async (body) => {
+        const { phone, amount, orderId } = body;
+        if (!phone || !amount || !orderId) {
+          return sendJson(res, 400, { error: "Phone, amount, and orderId are required" });
+        }
+        try {
+          const result = await triggerStkPush(phone, amount, orderId);
+
+          if (result.ResponseCode === "0") {
+            const order = store.orders.find(o => o.id === orderId);
+            if (order) {
+              order.mpesaCheckoutRequestId = result.CheckoutRequestID;
+              writeStore(store);
+            }
+          }
+
+          return sendJson(res, 200, result);
+        } catch (err) {
+          console.error("[M-Pesa] STK Push error:", err.message);
+          return sendJson(res, 500, { error: err.message });
+        }
+      })
+      .catch((err) => sendJson(res, 400, { error: err.message }));
+  }
+
+  if (method === "POST" && url.pathname === "/api/payments/callback") {
+    return parseBody(req)
+      .then((body) => {
+        const stkCallback = body.Body.stkCallback;
+        const checkoutRequestId = stkCallback.CheckoutRequestID;
+        const status = stkCallback.ResultCode === 0 ? "paid" : "failed";
+
+        console.log(`[M-Pesa] Payment callback for CheckoutID ${checkoutRequestId}: ${status}`);
+
+        // Find order and update status
+        const order = store.orders.find(o => o.mpesaCheckoutRequestId === checkoutRequestId);
+        if (order) {
+          order.paymentStatus = status;
+          order.mpesaResult = stkCallback;
+          writeStore(store);
+          console.log(`[M-Pesa] Order ${order.id} marked as ${status}`);
+        }
+
+        return sendJson(res, 200, { ok: true });
+      })
+      .catch((err) => {
+        console.error("[M-Pesa] Callback error:", err.message);
+        return sendJson(res, 400, { error: err.message });
+      });
   }
 
   if (method === "GET" && url.pathname === "/api/stock/movements") {

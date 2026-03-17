@@ -212,11 +212,11 @@ function renderInventory() {
       </thead>
       <tbody>
         ${state.inventory
-          .map(
-            (row) =>
-              `<tr><td>${row.productNumber}</td><td>${row.name}</td><td>${row.category}</td><td>${row.stockBottles}</td><td>${row.stockCrates}</td><td>${row.bottlesPerCrate}</td></tr>`
-          )
-          .join("")}
+      .map(
+        (row) =>
+          `<tr><td>${row.productNumber}</td><td>${row.name}</td><td>${row.category}</td><td>${row.stockBottles}</td><td>${row.stockCrates}</td><td>${row.bottlesPerCrate}</td></tr>`
+      )
+      .join("")}
       </tbody>
     </table>
   `;
@@ -306,7 +306,38 @@ async function onCheckout(ev) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload)
     });
-    $("#checkoutStatus").textContent = `Order ${order.id} created. Total: ${currency(order.total)}. Sales contact: ${order.salesContacts.join(" / ")}`;
+
+    const paymentMethod = form.get("paymentMethod");
+    let statusText = `Order ${order.id} created. Total: ${currency(order.total)}.`;
+
+    if (paymentMethod === "mpesa") {
+      statusText += " Initializing M-Pesa payment prompt...";
+      $("#checkoutStatus").textContent = statusText;
+
+      try {
+        const mpesaResult = await api("/api/payments/stkpush", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            phone: payload.customer.phone,
+            amount: order.total,
+            orderId: order.id
+          })
+        });
+
+        if (mpesaResult.ResponseCode === "0") {
+          statusText = `Order ${order.id} created. Please check your phone for the M-Pesa PIN prompt to pay ${currency(order.total)}.`;
+        } else {
+          statusText = `Order ${order.id} created, but M-Pesa prompt failed: ${mpesaResult.ResponseDescription || "Unknown error"}. Please pay via cash on delivery.`;
+        }
+      } catch (err) {
+        statusText = `Order ${order.id} created, but M-Pesa prompt failed: ${err.message}. Please pay via cash on delivery.`;
+      }
+    } else {
+      statusText += ` Please pay ${currency(order.total)} via cash on delivery.`;
+    }
+
+    $("#checkoutStatus").textContent = statusText;
     state.cart = [];
     renderCart();
     await refreshData();
